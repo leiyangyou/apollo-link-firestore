@@ -62,8 +62,10 @@ function createObjectType(definition: ObjectTypeDefinitionNode, typeMapping: Typ
       name: typename,
       fields: () => {
         const fields: any = {};
-        for (const field of definition.fields) {
-          fields[field.name.value] = { type: createFieldType(field.type, typeMapping) };
+        if (definition.fields) {
+          for (const field of definition.fields) {
+            fields[field.name.value] = { type: createFieldType(field.type, typeMapping) };
+          }
         }
         return fields;
       },
@@ -98,12 +100,16 @@ function createCreateInputObjectType(
   const typename = definition.name.value;
 
   const fields: any = {};
-  for (const field of definition.fields) {
-    const baseType = typeMapping[getBaseTypename(field.type)];
-    if (isLeafType(baseType) && baseType !== GraphQLID) {
-      fields[field.name.value] = { type: createInputFieldType(field.type, typeMapping, objectDefinitions) };
+
+  if (definition.fields) {
+    for (const field of definition.fields) {
+      const baseType = typeMapping[getBaseTypename(field.type)];
+      if (isLeafType(baseType) && baseType !== GraphQLID) {
+        fields[field.name.value] = { type: createInputFieldType(field.type, typeMapping, objectDefinitions) };
+      }
     }
   }
+
   const inputType = new GraphQLInputObjectType({
     name: `Create${typename}Input`,
     fields,
@@ -140,25 +146,27 @@ function createAddAndRemoveMutations(definition: ObjectTypeDefinitionNode, typeM
   const typename = definition.name.value;
   const mutations = new Map();
 
-  for (const field of definition.fields) {
-    const fieldTypename = getBaseTypename(field.type);
+  if (definition.fields) {
+    for (const field of definition.fields) {
+      const fieldTypename = getBaseTypename(field.type);
 
-    if (!isLeafType(typeMapping[fieldTypename])) {
-      const primaryId = `${typename.toLowerCase()}Id`;
-      const secondaryId = `${typename.toLowerCase()}Id`;
-      mutations.set(`add${toTitleCase(field.name.value)}To${typename}`, {
-        type: typeMapping[typename],
-        args: {
-          [primaryId]: { type: GraphQLID },
-          [secondaryId]: { type: GraphQLID },
-        },
-        async resolve(_: any, args: any, context: Context) {
-          await context.database.collection(fieldTypename).doc(args[secondaryId]).update({
-            [`__relations.${typename}.${field.name.value}`]: args[primaryId],
-          });
-          return args[primaryId];
-        },
-      });
+      if (!isLeafType(typeMapping[fieldTypename])) {
+        const primaryId = `${typename.toLowerCase()}Id`;
+        const secondaryId = `${typename.toLowerCase()}Id`;
+        mutations.set(`add${toTitleCase(field.name.value)}To${typename}`, {
+          type: typeMapping[typename],
+          args: {
+            [primaryId]: { type: GraphQLID },
+            [secondaryId]: { type: GraphQLID },
+          },
+          async resolve(_: any, args: any, context: Context) {
+            await context.database.collection(fieldTypename).doc(args[secondaryId]).update({
+              [`__relations.${typename}.${field.name.value}`]: args[primaryId],
+            });
+            return args[primaryId];
+          },
+        });
+      }
     }
   }
 

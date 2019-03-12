@@ -47,7 +47,7 @@ export function createFirestoreLink({ database, partialSchema }: Options) {
         )
         .then(async (iterator) => {
           for await (const data of iterator) {
-            observer.next({ data });
+            observer.next({ data }); // XXX: this may be problematic
           }
         });
       });
@@ -61,17 +61,32 @@ export function createFirestoreLink({ database, partialSchema }: Options) {
         variables,
         operationName,
       );
-      result.then((data: any) => {
-        observer.next(data);
-        observer.complete();
-      })
-      .catch((err: any) => {
-        if (err.name === "AbortError") { return; }
-        if (err.result && err.result.errors) {
-          observer.next(err.result);
+
+      if ("then" in result) {
+        result.then(({data, errors}) => {
+          if (errors) {
+            throw {errors};
+          } else {
+            observer.next({ data });
+            observer.complete();
+          }
+        }).catch((err: any) => {
+          if (err.name === "AbortError") { return; }
+          if (err.errors) {
+            observer.next(err);
+          }
+          observer.error(err);
+        });
+      } else {
+        const {data, errors} = result;
+        if (errors) {
+          observer.next(result);
+          observer.error(result);
+        } else {
+          observer.next({data});
+          observer.complete();
         }
-        observer.error(err);
-      });
+      }
     });
   });
 }
